@@ -65,10 +65,24 @@ func main() {
 		IdleTimeout:  120 * time.Second,
 	}
 
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", proxy.MetricsHandler())
+	metricsServer := &http.Server{
+		Addr:    ":9090",
+		Handler: metricsMux,
+	}
+
 	go func() {
 		log.Println("proxy listening on :8080")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
+		}
+	}()
+
+	go func() {
+		log.Println("metrics listening on :9090/metrics")
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("metrics server error: %v", err)
 		}
 	}()
 
@@ -83,6 +97,9 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("graceful shutdown failed: %v, forcing close", err)
 		server.Close()
+	}
+	if err := metricsServer.Shutdown(ctx); err != nil {
+		log.Printf("metrics server shutdown failed: %v", err)
 	}
 }
 

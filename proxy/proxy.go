@@ -22,9 +22,13 @@ func NewProxy(router *Router) *Proxy {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+
 	balancer := p.router.Match(r.URL.Path)
 	if balancer == nil {
-		http.Error(w, "no route for path", http.StatusNotFound)
+		http.Error(rec, "no route for path", http.StatusNotFound)
+		observeRequest(rec.status, "none", start)
 		return
 	}
 
@@ -37,10 +41,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		backend, err = balancer.Next()
 	}
 	if err != nil {
-		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+		http.Error(rec, "service unavailable", http.StatusServiceUnavailable)
+		observeRequest(rec.status, "none", start)
 		return
 	}
-	p.newReverseProxy(backend).ServeHTTP(w, r)
+
+	p.newReverseProxy(backend).ServeHTTP(rec, r)
+	observeRequest(rec.status, backend.URL.Host, start)
 }
 
 // sessionID extracts a client's sticky-session key from the X-Session-ID

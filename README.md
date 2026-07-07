@@ -2,7 +2,7 @@
 
 HTTP reverse proxy and load balancer in Go with weighted round-robin balancing,
 sticky sessions, path-based routing, per-backend circuit breakers, per-IP rate
-limiting, health checks, and graceful shutdown.
+limiting, health checks, graceful shutdown, and Prometheus metrics.
 
 ## Run
 
@@ -56,6 +56,9 @@ for i in $(seq 1 25); do curl -s -o /dev/null -w "%{http_code}\n" localhost:8080
 
 # Graceful shutdown: in-flight requests finish (up to 30s) before exit
 kill -TERM $(pgrep -f "go run main.go")
+
+# Metrics: requests_total{status,backend} counter + request_duration_seconds{status,backend} histogram
+curl localhost:9090/metrics
 ```
 
 ## Layout
@@ -68,6 +71,7 @@ goproxy/
 │   ├── balancer.go          Weighted round-robin + sticky-session balancer
 │   ├── router.go            Path-prefix routing to per-pool balancers
 │   ├── ratelimit.go         Per-IP token bucket middleware
+│   ├── metrics.go           Prometheus counter + histogram, /metrics handler
 │   └── proxy.go             httputil.ReverseProxy wiring
 └── backends/
     └── server.go            Test backend server
@@ -89,7 +93,8 @@ goproxy/
   After 5 in a row its circuit opens and the balancer skips it for a 30s
   cooldown, then lets exactly one half-open trial request through; success
   closes the circuit, failure reopens it and restarts the cooldown.
-
-## Next steps
-
-- Prometheus metrics: request counter + duration histogram on :9090/metrics
+- **Metrics** — `ServeHTTP` is wrapped with a `requests_total{status,backend}`
+  counter and a `request_duration_seconds{status,backend}` histogram,
+  exposed in Prometheus text format on `:9090/metrics`. Point a local
+  Prometheus + Grafana at it for a dashboard with zero extra app-side
+  infrastructure.

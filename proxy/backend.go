@@ -9,8 +9,9 @@ import (
 )
 
 type Backend struct {
-	URL   *url.URL
-	alive atomic.Bool
+	URL    *url.URL
+	Weight int
+	alive  atomic.Bool
 }
 
 func NewBackend(rawURL string) (*Backend, error) {
@@ -18,7 +19,7 @@ func NewBackend(rawURL string) (*Backend, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &Backend{URL: u}
+	b := &Backend{URL: u, Weight: 1}
 	b.alive.Store(true)
 	return b, nil
 }

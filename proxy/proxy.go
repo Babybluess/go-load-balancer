@@ -15,21 +15,27 @@ const (
 )
 
 type Proxy struct {
-	balancer *Balancer
+	router *Router
 }
 
-func NewProxy(balancer *Balancer) *Proxy {
-	return &Proxy{balancer: balancer}
+func NewProxy(router *Router) *Proxy {
+	return &Proxy{router: router}
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	balancer := p.router.Match(r.URL.Path)
+	if balancer == nil {
+		http.Error(w, "no route for path", http.StatusNotFound)
+		return
+	}
+
 	var backend *Backend
 	var err error
 
 	if id := sessionID(r); id != "" {
-		backend, err = p.balancer.NextForSession(id)
+		backend, err = balancer.NextForSession(id)
 	} else {
-		backend, err = p.balancer.Next()
+		backend, err = balancer.Next()
 	}
 	if err != nil {
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)

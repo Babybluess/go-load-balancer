@@ -49,6 +49,9 @@ func main() {
 				if !b.IsAlive() {
 					status = "DOWN"
 				}
+				if b.CircuitOpen() {
+					status += " (circuit open)"
+				}
 				fmt.Fprintf(w, "%s → %s\n", b.URL, status)
 			}
 		}

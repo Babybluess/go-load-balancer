@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"time"
 )
 
@@ -41,7 +40,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 		return
 	}
-	p.newReverseProxy(backend.URL).ServeHTTP(w, r)
+	p.newReverseProxy(backend).ServeHTTP(w, r)
 }
 
 // sessionID extracts a client's sticky-session key from the X-Session-ID
@@ -56,7 +55,8 @@ func sessionID(r *http.Request) string {
 	return ""
 }
 
-func (p *Proxy) newReverseProxy(target *url.URL) *httputil.ReverseProxy {
+func (p *Proxy) newReverseProxy(backend *Backend) *httputil.ReverseProxy {
+	target := backend.URL
 	rp := httputil.NewSingleHostReverseProxy(target)
 
 	rp.Transport = &http.Transport{
@@ -74,7 +74,16 @@ func (p *Proxy) newReverseProxy(target *url.URL) *httputil.ReverseProxy {
 		req.Host = target.Host
 	}
 
+	// A response reaching ModifyResponse means the backend was reachable,
+	// regardless of its status code, so it counts as a circuit breaker
+	// success. ErrorHandler fires on transport-level failures and counts as a failure.
+	rp.ModifyResponse = func(resp *http.Response) error {
+		backend.RecordSuccess()
+		return nil
+	}
+
 	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		backend.RecordFailure()
 		log.Printf("backend %s error: %v", target, err)
 		http.Error(w, fmt.Sprintf("bad gateway: %v", err), http.StatusBadGateway)
 	}

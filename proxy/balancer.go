@@ -43,7 +43,7 @@ func (b *Balancer) Next() (*Backend, error) {
 	start := b.counter.Add(1) - 1
 	for i := range n {
 		backend := b.weighted[(start+i)%n]
-		if backend.IsAlive() {
+		if backend.IsAlive() && backend.Allowed() {
 			return backend, nil
 		}
 	}
@@ -65,7 +65,7 @@ func (b *Balancer) NextForSession(sessionID string) (*Backend, error) {
 
 	for i := range n {
 		backend := b.weighted[(start+i)%n]
-		if backend.IsAlive() {
+		if backend.IsAlive() && backend.Allowed() {
 			return backend, nil
 		}
 	}

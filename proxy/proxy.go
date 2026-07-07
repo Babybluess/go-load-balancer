@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	sessionHeader = "X-Session-ID"
+	sessionCookie = "session_id"
+)
+
 type Proxy struct {
 	balancer *Balancer
 }
@@ -18,12 +23,31 @@ func NewProxy(balancer *Balancer) *Proxy {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	backend, err := p.balancer.Next()
+	var backend *Backend
+	var err error
+
+	if id := sessionID(r); id != "" {
+		backend, err = p.balancer.NextForSession(id)
+	} else {
+		backend, err = p.balancer.Next()
+	}
 	if err != nil {
 		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	p.newReverseProxy(backend.URL).ServeHTTP(w, r)
+}
+
+// sessionID extracts a client's sticky-session key from the X-Session-ID
+// header, falling back to the session_id cookie if the header is absent.
+func sessionID(r *http.Request) string {
+	if id := r.Header.Get(sessionHeader); id != "" {
+		return id
+	}
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		return c.Value
+	}
+	return ""
 }
 
 func (p *Proxy) newReverseProxy(target *url.URL) *httputil.ReverseProxy {

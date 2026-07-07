@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"errors"
+	"hash/fnv"
 	"sync/atomic"
 )
 
@@ -40,6 +41,28 @@ func (b *Balancer) Next() (*Backend, error) {
 	}
 
 	start := b.counter.Add(1) - 1
+	for i := range n {
+		backend := b.weighted[(start+i)%n]
+		if backend.IsAlive() {
+			return backend, nil
+		}
+	}
+	return nil, ErrNoBackends
+}
+
+// NextForSession deterministically maps sessionID to a backend so repeat
+// requests from the same client keep landing on the same backend, falling
+// forward to the next alive one if its pick is currently down.
+func (b *Balancer) NextForSession(sessionID string) (*Backend, error) {
+	n := uint64(len(b.weighted))
+	if n == 0 {
+		return nil, ErrNoBackends
+	}
+
+	h := fnv.New64a()
+	h.Write([]byte(sessionID))
+	start := h.Sum64() % n
+
 	for i := range n {
 		backend := b.weighted[(start+i)%n]
 		if backend.IsAlive() {

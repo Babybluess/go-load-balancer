@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 
 	"goproxy/proxy"
 )
+
+const shutdownTimeout = 30 * time.Second
 
 func main() {
 	backendURLs := []string{
@@ -65,8 +68,14 @@ func main() {
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 	<-quit
 
-	log.Println("shutting down proxy...")
-	server.Close()
+	log.Println("shutting down proxy, draining in-flight requests...")
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("graceful shutdown failed: %v, forcing close", err)
+		server.Close()
+	}
 }
 
 func getEnv(key, fallback string) string {
